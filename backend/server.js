@@ -3,6 +3,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import userRoutes from './routes/userRoutes.js';
+import classRoutes from './routes/classRoutes.js';
 import connectDB from './config/db.js';
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.use(express.json());
 
 // Use the user routes for any requests to /api/users
 app.use('/api/users', userRoutes);
+app.use('/api/classes', classRoutes);
 
 
 
