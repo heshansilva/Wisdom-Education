@@ -4,6 +4,9 @@ import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import userRoutes from './routes/userRoutes.js';
 import classRoutes from './routes/classRoutes.js';
+import videoRoutes from './routes/videoRoutes.js'; 
+import lessonRoutes from './routes/lessonRoutes.js';
+import profileRoutes from './routes/profileRoutes.js';
 import connectDB from './config/db.js';
 dotenv.config();
 
@@ -18,7 +21,9 @@ app.use(express.json());
 // Use the user routes for any requests to /api/users
 app.use('/api/users', userRoutes);
 app.use('/api/classes', classRoutes);
-
+app.use('/api/videos', videoRoutes);
+app.use('/api/lessons', lessonRoutes);
+app.use('/api/profile', profileRoutes);
 
 
 // Define a simple route for the homepage

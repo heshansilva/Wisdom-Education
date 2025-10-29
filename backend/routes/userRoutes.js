@@ -1,6 +1,6 @@
 import express from 'express';
-import { registerUser, loginUser, getUserProfile } from '../controllers/userController.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { registerUser, loginUser, getUserProfile, getStudents } from '../controllers/userController.js';
+import { protect, isTeacher } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -16,6 +16,9 @@ router.post('/login', loginUser);
 // The 'protect' middleware runs first. If the token is valid, it calls next()
 // which then runs the getUserProfile controller.
 router.get('/profile', protect, getUserProfile);
+
+// Get a list of all students (only accessible by teachers)
+router.get('/students', protect, isTeacher, getStudents);
 
 // Export the router
 export default router;

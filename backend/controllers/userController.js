@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
 // @access  Public
 const registerUser = async (req, res) => {
   // Get name, email, and password from the request body
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, phone } = req.body;
 
   try {
     // Check if a user with the same email already exists
@@ -28,6 +28,7 @@ const registerUser = async (req, res) => {
       email,
       password: hashedPassword,
       role,
+      phone,
     });
 
     // If the user was created successfully
@@ -36,6 +37,7 @@ const registerUser = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role,
         message: 'User registered successfully',
       });
@@ -73,6 +75,7 @@ const registerUser = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role,
         token,
       });
@@ -91,6 +94,7 @@ const registerUser = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      phone: user.phone,
       role: user.role,
     });
   } else {
@@ -98,4 +102,19 @@ const registerUser = async (req, res) => {
   }
 };
 
-  export { registerUser, loginUser, getUserProfile };
+// @desc    Get all students (for teachers)
+// @route   GET /api/users/students
+// @access  Private (Teacher)
+const getStudents = async (req, res) => {
+  try {
+    // Find all users with the role 'student'
+    // .select('-password') excludes the password field from the result
+    const students = await User.find({ role: 'student' }).select('-password');
+    res.json(students);
+  } catch (error) {
+    console.error(`Get Students Error: ${error.message}`); // Log error
+    res.status(500).json({ message: `Server Error: ${error.message}` });
+  }
+};
+
+export { registerUser, loginUser, getUserProfile, getStudents };

@@ -16,6 +16,12 @@ const userSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+
+     phone: {
+      type: String,
+      required: false, // We'll make it optional for now
+      default: '',
+    },
     role: {
       type: String,
       required: true,
