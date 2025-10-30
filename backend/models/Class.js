@@ -26,6 +26,12 @@ const classSchema = mongoose.Schema(
       required: true,
       default: 0,
     },
+     students: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User', // References the 'User' model
+      },
+    ],
   },
   {
     timestamps: true, // Automatically adds createdAt and updatedAt fields

@@ -1,17 +1,40 @@
 import express from 'express';
-import { createClass, getClasses, deleteClass, updateClass } from '../controllers/classController.js';
+const router = express.Router();
+import {
+  getClasses, createClass, updateClass, deleteClass,
+  getEnrolledStudents, enrollStudent, unenrollStudent, getStudentClasses
+} from '../controllers/classController.js';
 import { protect, isTeacher } from '../middleware/authMiddleware.js';
 
-const router = express.Router();
+// --- STUDENT ROUTE ---
+// Must be defined *before* the restricted /:id routes
+// GET /api/classes/myclasses
+router.get('/myclasses', protect, getStudentClasses); // protect only, for students
 
-// When a POST request is made to '/', it first runs 'protect'.
-// If that passes, it runs 'isTeacher'.
-// If that passes, it finally runs 'createClass'.
-router.post('/', protect, isTeacher, createClass);
-router.get('/', protect, isTeacher, getClasses);
-router.delete('/:id', protect, isTeacher, deleteClass);
-router.put('/:id', protect, isTeacher, updateClass);
+// --- TEACHER ROUTES ---
+// GET /api/classes
+// POST /api/classes
+router.route('/')
+  .all(protect, isTeacher)
+  .get(getClasses)
+  .post(createClass);
 
+// GET /api/classes/:id/students (Teacher gets enrolled students)
+router.get('/:id/students', protect, isTeacher, getEnrolledStudents); 
 
+// PUT /api/classes/:id/enroll (Teacher enrolls a student)
+router.put('/:id/enroll', protect, isTeacher, enrollStudent); 
+
+// PUT /api/classes/:id/unenroll (Teacher unenrolls a student)
+router.put('/:id/unenroll', protect, isTeacher, unenrollStudent); 
+
+// GET /api/classes/:id 
+// PUT /api/classes/:id
+// DELETE /api/classes/:id
+router.route('/:id')
+  .all(protect, isTeacher)
+  .get(asyncHandler(async (req, res) => {  })) // Placeholder for getSingleClass
+  .put(updateClass)
+  .delete(deleteClass);
 
 export default router;

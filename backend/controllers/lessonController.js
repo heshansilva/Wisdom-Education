@@ -175,6 +175,15 @@ const deleteLesson = asyncHandler(async (req, res) => {
   });
 });
 
-export { getLessons, createLesson, updateLesson, deleteLesson };
+const getStudentLessons = asyncHandler(async (req, res) => {
+  // For now, fetch all lessons.
+  // FUTURE: Filter based on student's enrolled classes or grade/subject.
+  const lessons = await Lesson.find({}) // Fetch all for now
+    .populate('teacher', 'name') // Optionally show teacher name
+    .sort({ createdAt: -1 });
+  res.status(200).json(lessons);
+});
+
+export { getLessons, createLesson, updateLesson, deleteLesson, getStudentLessons };
 
 
