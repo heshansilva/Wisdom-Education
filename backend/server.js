@@ -8,8 +8,11 @@ import videoRoutes from './routes/videoRoutes.js';
 import lessonRoutes from './routes/lessonRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import paperRoutes from './routes/paperRoutes.js';
+import attendanceRoutes from './routes/attendanceRoutes.js';
 import connectDB from './config/db.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import statsRoutes from './routes/statsRoutes.js';
+
 dotenv.config();
 
 const app = express();
@@ -28,6 +31,8 @@ app.use('/api/lessons', lessonRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/papers', paperRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/stats', statsRoutes);
 
 // Define a simple route for the homepage
   app.get('/', (req, res) => {

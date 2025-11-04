@@ -38,7 +38,29 @@ const teacherProfileSchema = mongoose.Schema(
     cloudinaryLogoPublicId: { // To allow deletion from Cloudinary
        type: String,
        default: ''
+    },
+    welcomeTitle: {
+      type: String,
+      default: 'Welcome to My Page',
+    },
+    welcomeDescription: {
+      type: String,
+      default: 'Add a short description about your classes here.',
+    },
+    aboutMeContent: {
+      type: String,
+      default: 'Write a detailed section about your experience and teaching methods.',
+    },
+    mainImageUrl: { // For the "Main Post Image"
+      type: String,
+      default: '',
+    },
+    cloudinaryMainImagePublicId: { // To delete the main image
+       type: String,
+       default: ''
     }
+    // We can add the photo gallery array later if needed
+    // photoGallery: [{ imageUrl: String, publicId: String }]
   },
   {
     timestamps: true,

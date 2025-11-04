@@ -2,6 +2,7 @@ import Paper from '../models/Paper.js'; // Use Paper model
 import cloudinary from '../config/cloudinary.js';
 import asyncHandler from 'express-async-handler';
 import streamifier from 'streamifier';
+import Class from '../models/Class.js'; // Import Class model for filtering
 
 // @desc    Get all papers for the logged-in teacher
 // @route   GET /api/papers
@@ -16,23 +17,18 @@ const getPapers = asyncHandler(async (req, res) => {
 // @access  Private (Teacher)
 const createPaper = asyncHandler(async (req, res) => {
   const { title, description, subject, grade } = req.body;
-
-  if (!req.file) {
-    res.status(400); throw new Error('Please upload a PDF file for the paper');
-  }
-   if (!req.file.buffer || req.file.buffer.length === 0) {
-     res.status(400); throw new Error('Uploaded paper file is empty or corrupted');
-  }
-  if (!title || !subject || !grade) {
-    res.status(400); throw new Error('Please add title, subject, and grade');
-  }
+  
+  if (!req.file) { res.status(400); throw new Error('Please upload a PDF file for the paper'); }
+  if (!req.file.buffer || req.file.buffer.length === 0) { res.status(400); throw new Error('Uploaded paper file is empty or corrupted'); }
+  if (!title || !subject || !grade) { res.status(400); throw new Error('Please add title, subject, and grade'); }
 
   // Upload file buffer to Cloudinary
   let uploadResult;
   try {
     uploadResult = await new Promise((resolve, reject) => {
+      // Upload to 'papers' folder
       const uploadStream = cloudinary.uploader.upload_stream(
-        { folder: 'papers', resource_type: 'raw', format: 'pdf' }, // Store in 'papers' folder
+        { folder: 'papers', resource_type: 'raw', format: 'pdf' },
         (error, result) => {
           if (error) { console.error('Cloudinary Upload Error:', error); return reject(new Error(`Failed to upload paper file: ${error.message || 'Unknown error'}`)); }
           if (!result || !result.secure_url || !result.public_id) { console.error('Cloudinary Upload Incomplete Result:', result); return reject(new Error('Cloudinary upload did not return necessary details.'));}
@@ -54,13 +50,14 @@ const createPaper = asyncHandler(async (req, res) => {
       description: description || '',
       subject,
       grade,
-      paperUrl: uploadResult.secure_url, // Use paperUrl field
+      paperUrl: uploadResult.secure_url, // Use paperUrl
       cloudinaryPublicId: uploadResult.public_id,
     });
     res.status(201).json(paper);
   } catch(dbError){
       console.error("Database save error after paper upload:", dbError);
-      try { // Attempt cleanup
+      // Attempt cleanup
+      try {
           await cloudinary.uploader.destroy(uploadResult.public_id, { resource_type: 'raw' });
           console.log("Orphaned Cloudinary paper deleted:", uploadResult.public_id);
       } catch (cleanupError) {
@@ -75,7 +72,6 @@ const createPaper = asyncHandler(async (req, res) => {
 // @access  Private (Teacher)
 const updatePaper = asyncHandler(async (req, res) => {
   const paper = await Paper.findById(req.params.id);
-
   if (!paper) { res.status(404); throw new Error('Paper not found'); }
   if (!req.user || !req.user._id) { res.status(401); throw new Error('Not authorized');}
   if (paper.teacher.toString() !== req.user._id.toString()) { res.status(403); throw new Error('User not authorized');}
@@ -89,12 +85,11 @@ const updatePaper = asyncHandler(async (req, res) => {
   res.status(200).json(updatedPaper);
 });
 
-// @desc    Delete a paper (including file from Cloudinary)
+// @desc    Delete a paper
 // @route   DELETE /api/papers/:id
 // @access  Private (Teacher)
 const deletePaper = asyncHandler(async (req, res) => {
   const paper = await Paper.findById(req.params.id);
-
   if (!paper) { res.status(404); throw new Error('Paper not found'); }
   if (!req.user || !req.user._id) { res.status(401); throw new Error('Not authorized');}
   if (paper.teacher.toString() !== req.user._id.toString()) { res.status(403); throw new Error('User not authorized');}
@@ -103,8 +98,8 @@ const deletePaper = asyncHandler(async (req, res) => {
   let cloudinaryDeleted = false;
   try {
     const destroyResult = await cloudinary.uploader.destroy(paper.cloudinaryPublicId, { resource_type: 'raw' });
-    if (destroyResult.result === 'ok') { cloudinaryDeleted = true; console.log("Cloudinary paper deleted:", paper.cloudinaryPublicId); }
-    else { console.warn("Cloudinary paper deletion not 'ok':", destroyResult.result, "ID:", paper.cloudinaryPublicId); }
+    if (destroyResult.result === 'ok') { cloudinaryDeleted = true; }
+    else { console.warn("Cloudinary deletion not 'ok':", destroyResult.result); }
   } catch (cloudinaryError) { console.error(`Cloudinary Delete Error (Paper ${paper.cloudinaryPublicId}):`, cloudinaryError); }
 
   // Delete from DB
@@ -112,29 +107,47 @@ const deletePaper = asyncHandler(async (req, res) => {
 
   res.status(200).json({
       id: req.params.id,
-      message: `Paper deleted successfully.${!cloudinaryDeleted ? ' Cloudinary file may still exist.' : ''}`
+      message: `Paper deleted.${!cloudinaryDeleted ? ' Cloudinary file may still exist.' : ''}`
   });
 });
 
-// @desc    Get papers accessible to the logged-in student
+// --- UPDATED STUDENT FUNCTION ---
+// @desc    Get all papers accessible to students (filtered by enrolled class/grade)
 // @route   GET /api/papers/student
-// @access  Private (Student)
+// @access  Private (Student/User)
 const getStudentPapers = asyncHandler(async (req, res) => {
-  // **Simplification:** For now, fetch ALL papers.
-  // **Future Improvement:** Filter papers based on the student's enrolled classes, grade, or subjects.
-  // This would require linking students to classes/subjects first.
-  const papers = await Paper.find({}) // Fetch all papers for now
-                            .sort({ createdAt: -1 })
-                            .select('-cloudinaryPublicId -teacher'); // Exclude sensitive/internal info
+  // 1. Find all classes the student is enrolled in
+  const studentClasses = await Class.find({ students: req.user._id }).select('subject grade');
 
-  // **Alternative (More Complex):**
-  // const student = await User.findById(req.user._id); // Assuming student details like grade are on User model
-  // if (!student || !student.grade) {
-  //   return res.json([]); // Or throw error
-  // }
-  // const papers = await Paper.find({ grade: student.grade }).sort(...);
+  if (!studentClasses || studentClasses.length === 0) {
+    return res.status(200).json([]); // Return empty array if not enrolled
+  }
 
+  // 2. Create a set of unique subject-grade pairs
+  const criteria = [
+    ...new Map(studentClasses.map(cls => 
+      [`${cls.subject}|${cls.grade}`, { subject: cls.subject, grade: cls.grade }]
+    )).values()
+  ];
+
+   if (criteria.length === 0) {
+     return res.status(200).json([]);
+  }
+
+  // 3. Find papers that match any ($or) of these subject-grade pairs
+  const papers = await Paper.find({ $or: criteria })
+    .populate('teacher', 'name')
+    .sort({ createdAt: -1 });
+  
   res.status(200).json(papers);
 });
+// --- END UPDATED FUNCTION ---
 
-export { getPapers, createPaper, updatePaper, deletePaper, getStudentPapers };
+export {
+  getPapers,
+  createPaper,
+  updatePaper,
+  deletePaper,
+  getStudentPapers
+};
+

@@ -1,6 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import TeacherProfile from '../models/TeacherProfile.js'; // Import the Profile model
-import cloudinary from '../config/cloudinary.js';         
+import cloudinary from '../config/cloudinary.js';         // Import Cloudinary config
 import streamifier from 'streamifier';                  // Import streamifier helper
 
 // @desc    Get the logged-in teacher's profile (or create if none exists)
@@ -16,7 +16,7 @@ const getTeacherProfile = asyncHandler(async (req, res) => {
   res.status(200).json(profile);
 });
 
-// @desc    Update the logged-in teacher's profile (text fields only)
+// @desc    Update the logged-in teacher's profile (metadata)
 // @route   PUT /api/profile/teacher
 // @access  Private (Teacher)
 const updateTeacherProfile = asyncHandler(async (req, res) => {
@@ -27,13 +27,16 @@ const updateTeacherProfile = asyncHandler(async (req, res) => {
      profile = await TeacherProfile.create({ user: req.user._id });
   }
 
-  // Update fields from request body
+  // Extract ALL fields from the body
   const {
+    // Contact/Social
     profileTitle, publicContactNumber, publicEmailAddress, youtubeVideoUrl,
-    facebookUrl, youtubeChannelUrl, tiktokUrl, instagramUrl
+    facebookUrl, youtubeChannelUrl, tiktokUrl, instagramUrl,
+    // NEW Homepage Content
+    welcomeTitle, welcomeDescription, aboutMeContent
   } = req.body;
 
-  // Only update fields that are actually sent in the request
+  // --- Update Contact/Social fields ---
   if (profileTitle !== undefined) profile.profileTitle = profileTitle;
   if (publicContactNumber !== undefined) profile.publicContactNumber = publicContactNumber;
   if (publicEmailAddress !== undefined) profile.publicEmailAddress = publicEmailAddress;
@@ -42,6 +45,11 @@ const updateTeacherProfile = asyncHandler(async (req, res) => {
   if (youtubeChannelUrl !== undefined) profile.youtubeChannelUrl = youtubeChannelUrl;
   if (tiktokUrl !== undefined) profile.tiktokUrl = tiktokUrl;
   if (instagramUrl !== undefined) profile.instagramUrl = instagramUrl;
+
+  // --- NEW: Update Homepage Content fields ---
+  if (welcomeTitle !== undefined) profile.welcomeTitle = welcomeTitle;
+  if (welcomeDescription !== undefined) profile.welcomeDescription = welcomeDescription;
+  if (aboutMeContent !== undefined) profile.aboutMeContent = aboutMeContent;
 
   const updatedProfile = await profile.save();
   res.status(200).json(updatedProfile);
@@ -72,12 +80,10 @@ const uploadProfileLogo = asyncHandler(async (req, res) => {
   if (profile.cloudinaryLogoPublicId) {
     try {
       console.log(`Attempting to delete old logo: ${profile.cloudinaryLogoPublicId}`);
-      // For images, resource_type defaults to 'image', no need to specify 'raw' explicitly
       await cloudinary.uploader.destroy(profile.cloudinaryLogoPublicId);
       console.log(`Successfully deleted old logo: ${profile.cloudinaryLogoPublicId}`);
     } catch (deleteError) {
       console.error(`Failed to delete old Cloudinary logo (${profile.cloudinaryLogoPublicId}):`, deleteError);
-      // Log error but continue with upload
     }
   }
 
@@ -87,8 +93,7 @@ const uploadProfileLogo = asyncHandler(async (req, res) => {
     uploadResult = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          folder: 'profile_logos', // Store logos in a specific folder
-          // Optional: Add transformations for consistent sizing
+          folder: 'profile_logos',
            transformation: [{ width: 300, height: 300, crop: "limit", quality: "auto" }]
         },
         (error, result) => {
@@ -107,18 +112,96 @@ const uploadProfileLogo = asyncHandler(async (req, res) => {
     });
   } catch (uploadError) {
     console.error("Cloudinary logo upload failed:", uploadError);
-    // Let the central error handler manage the response status code
     throw new Error(`Failed to upload logo image. ${uploadError.message}`);
   }
 
-  // 5. Update profile document in DB with new Cloudinary info
+  // 5. Update profile document in DB
   profile.profileLogoUrl = uploadResult.secure_url;
   profile.cloudinaryLogoPublicId = uploadResult.public_id;
+
+  const updatedProfile = await profile.save();
+  res.status(200).json(updatedProfile);
+});
+
+// ---FUNCTION for Main Image Upload ---
+// @desc    Upload or update teacher main image
+// @route   PUT /api/profile/teacher/main-image
+// @access  Private (Teacher)
+const uploadMainImage = asyncHandler(async (req, res) => {
+  const profile = await TeacherProfile.findOne({ user: req.user._id });
+  if (!profile) { res.status(404); throw new Error('Teacher profile not found.'); }
+  if (!req.file) { res.status(400); throw new Error('Please upload an image file.'); }
+   if (!req.file.buffer || req.file.buffer.length === 0) {
+     res.status(400); throw new Error('Uploaded image file is empty or corrupted');
+  }
+
+  // Delete old main image if it exists
+  if (profile.cloudinaryMainImagePublicId) {
+    try {
+      console.log(`Attempting to delete old main image: ${profile.cloudinaryMainImagePublicId}`);
+      await cloudinary.uploader.destroy(profile.cloudinaryMainImagePublicId);
+      console.log(`Successfully deleted old main image: ${profile.cloudinaryMainImagePublicId}`);
+    } catch (deleteError) {
+      console.error(`Failed to delete old main image (${profile.cloudinaryMainImagePublicId}):`, deleteError);
+    }
+  }
+  
+  // Upload new main image
+  let uploadResult;
+  try {
+    uploadResult = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'main_images', // Store in a different folder
+          transformation: [{ width: 1200, height: 600, crop: "limit", quality: "auto" }] 
+        },
+        (error, result) => {
+          if (error) { console.error('Cloudinary Main Image Upload Error:', error); return reject(new Error('Failed to upload main image')); }
+          if (!result || !result.secure_url || !result.public_id) { console.error('Cloudinary Main Image Upload Incomplete Result:', result); return reject(new Error('Cloudinary image upload did not return details.')); }
+          resolve(result);
+        }
+      );
+      streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
+    });
+  } catch (uploadError) {
+     console.error("Cloudinary main image upload failed:", uploadError);
+    throw new Error(`Failed to upload main image. ${uploadError.message}`);
+  }
+
+  profile.mainImageUrl = uploadResult.secure_url;
+  profile.cloudinaryMainImagePublicId = uploadResult.public_id;
 
   const updatedProfile = await profile.save();
   res.status(200).json(updatedProfile); // Send back the complete updated profile
 });
 
+const getPublicTeacherProfile = asyncHandler(async (req, res) => {
+  const userId = req.params.userId;
+
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+      res.status(400);
+      throw new Error('Invalid User ID format');
+  }
+
+  // Find the profile and populate the user's name
+  // We populate 'user' but only select the 'name' field for privacy
+  const profile = await TeacherProfile.findOne({ user: userId })
+                            .populate('user', 'name');
+
+  if (!profile) {
+    res.status(404);
+    throw new Error('Teacher profile not found');
+  }
+
+  res.status(200).json(profile);
+});
+
 // --- Use ES Module export ---
-export { getTeacherProfile, updateTeacherProfile, uploadProfileLogo };
+export {
+  getTeacherProfile,
+  updateTeacherProfile,
+  uploadProfileLogo,
+  getPublicTeacherProfile,
+  uploadMainImage 
+};
 
